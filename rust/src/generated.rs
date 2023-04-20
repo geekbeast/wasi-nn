@@ -6,6 +6,7 @@ use core::fmt;
 use core::mem::MaybeUninit;
 pub type BufferSize = u32;
 pub type Status = u32;
+pub type HalfUuid = u64;
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct NnErrno(u16);
@@ -357,6 +358,70 @@ pub unsafe fn compute(context: GraphExecutionContext) -> Result<(), NnErrno> {
     }
 }
 
+pub unsafe fn ask_question(
+    context: &str,
+    question: &str,
+    response: *mut u8,
+    max_response_size: BufferSize,
+) -> Result<(), NnErrno> {
+    let ret = wasi_ephemeral_nn::ask_question(
+        context.as_ptr() as i32,
+        context.len() as i32,
+        question.as_ptr() as i32,
+        question.len() as i32,
+        response as i32,
+        max_response_size as i32,
+    );
+    match ret {
+        0 => Ok(()),
+        _ => Err(NnErrno(ret as u16)),
+    }
+}
+
+pub unsafe fn create_chat(
+    message: &str,
+    response: *mut u8,
+    max_response_size: BufferSize,
+) -> Result<(HalfUuid, HalfUuid), NnErrno> {
+    let mut rp0 = MaybeUninit::<HalfUuid>::uninit();
+    let mut rp1 = MaybeUninit::<HalfUuid>::uninit();
+    let ret = wasi_ephemeral_nn::create_chat(
+        message.as_ptr() as i32,
+        message.len() as i32,
+        response as i32,
+        max_response_size as i32,
+        rp0.as_mut_ptr() as i32,
+        rp1.as_mut_ptr() as i32,
+    );
+    match ret {
+        0 => Ok((
+            core::ptr::read(rp0.as_mut_ptr() as i32 as *const HalfUuid),
+            core::ptr::read(rp1.as_mut_ptr() as i32 as *const HalfUuid),
+        )),
+        _ => Err(NnErrno(ret as u16)),
+    }
+}
+
+pub unsafe fn continue_chat(
+    chat_id: &str,
+    message: &str,
+    response: *mut u8,
+    max_response_size: BufferSize,
+) -> Result<(), NnErrno> {
+    let ret = wasi_ephemeral_nn::continue_chat(
+        chat_id.as_ptr() as i32,
+        chat_id.len() as i32,
+        message.as_ptr() as i32,
+        message.len() as i32,
+        response as i32,
+        max_response_size as i32,
+    );
+    match ret {
+        0 => Ok(()),
+        _ => Err(NnErrno(ret as u16)),
+    }
+}
+
 pub mod wasi_ephemeral_nn {
     #[link(wasm_import_module = "wasi_ephemeral_nn")]
     extern "C" {
@@ -386,5 +451,23 @@ pub mod wasi_ephemeral_nn {
         pub fn set_input(arg0: i32, arg1: i32, arg2: i32) -> i32;
         pub fn get_output(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32) -> i32;
         pub fn compute(arg0: i32) -> i32;
+        pub fn ask_question(
+            arg0: i32,
+            arg1: i32,
+            arg2: i32,
+            arg3: i32,
+            arg4: i32,
+            arg5: i32,
+        ) -> i32;
+        pub fn create_chat(arg0: i32, arg1: i32, arg2: i32, arg3: i32, arg4: i32, arg5: i32)
+            -> i32;
+        pub fn continue_chat(
+            arg0: i32,
+            arg1: i32,
+            arg2: i32,
+            arg3: i32,
+            arg4: i32,
+            arg5: i32,
+        ) -> i32;
     }
 }
